@@ -1,0 +1,47 @@
+{
+    "PaintingAgent": {
+        "checkpoints": [
+            {
+                "steps": 416300,
+                "file_path": "results\\painting_run_05\\PaintingAgent\\PaintingAgent-416300.onnx",
+                "reward": 0.5228517601887385,
+                "creation_time": 1777721828.0495605,
+                "auxillary_file_paths": [
+                    "results\\painting_run_05\\PaintingAgent\\PaintingAgent-416300.pt"
+                ]
+            },
+            {
+                "steps": 499964,
+                "file_path": "results\\painting_run_05\\PaintingAgent\\PaintingAgent-499964.onnx",
+                "reward": 0.5161028520928489,
+                "creation_time": 1777722841.5760367,
+                "auxillary_file_paths": [
+                    "results\\painting_run_05\\PaintingAgent\\PaintingAgent-499964.pt"
+                ]
+            },
+            {
+                "steps": 698200,
+                "file_path": "results\\painting_run_05\\PaintingAgent\\PaintingAgent-698200.onnx",
+                "reward": 0.5171374728282293,
+                "creation_time": 1777724420.9858084,
+                "auxillary_file_paths": [
+                    "results\\painting_run_05\\PaintingAgent\\PaintingAgent-698200.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 698200,
+            "file_path": "results\\painting_run_05\\PaintingAgent.onnx",
+            "reward": 0.5171374728282293,
+            "creation_time": 1777724420.9858084,
+            "auxillary_file_paths": [
+                "results\\painting_run_05\\PaintingAgent\\PaintingAgent-698200.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "1.1.0",
+        "torch_version": "2.5.1+cu121"
+    }
+}

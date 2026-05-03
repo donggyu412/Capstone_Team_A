@@ -1,0 +1,56 @@
+{
+    "PaintingAgent": {
+        "checkpoints": [
+            {
+                "steps": 167456,
+                "file_path": "results\\painting_run_06\\PaintingAgent\\PaintingAgent-167456.onnx",
+                "reward": 1.516290704254061,
+                "creation_time": 1777726284.590494,
+                "auxillary_file_paths": [
+                    "results\\painting_run_06\\PaintingAgent\\PaintingAgent-167456.pt"
+                ]
+            },
+            {
+                "steps": 499984,
+                "file_path": "results\\painting_run_06\\PaintingAgent\\PaintingAgent-499984.onnx",
+                "reward": 2.010719553381205,
+                "creation_time": 1777729412.0369544,
+                "auxillary_file_paths": [
+                    "results\\painting_run_06\\PaintingAgent\\PaintingAgent-499984.pt"
+                ]
+            },
+            {
+                "steps": 723184,
+                "file_path": "results\\painting_run_06\\PaintingAgent\\PaintingAgent-723184.onnx",
+                "reward": 2.1096953824162483,
+                "creation_time": 1777731341.7672274,
+                "auxillary_file_paths": [
+                    "results\\painting_run_06\\PaintingAgent\\PaintingAgent-723184.pt"
+                ]
+            },
+            {
+                "steps": 725584,
+                "file_path": "results\\painting_run_06\\PaintingAgent\\PaintingAgent-725584.onnx",
+                "reward": 1.9966110698878765,
+                "creation_time": 1777731699.7674723,
+                "auxillary_file_paths": [
+                    "results\\painting_run_06\\PaintingAgent\\PaintingAgent-725584.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 725584,
+            "file_path": "results\\painting_run_06\\PaintingAgent.onnx",
+            "reward": 1.9966110698878765,
+            "creation_time": 1777731699.7674723,
+            "auxillary_file_paths": [
+                "results\\painting_run_06\\PaintingAgent\\PaintingAgent-725584.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "1.1.0",
+        "torch_version": "2.5.1+cu121"
+    }
+}
