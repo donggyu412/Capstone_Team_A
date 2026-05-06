@@ -97,3 +97,15 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# ML-Agents 
+/results/
+
+# ML-Agents 
+*.onnx
+*.onnx.meta
+
+# Python 
+__pycache__/
+*.pyc
+.env
