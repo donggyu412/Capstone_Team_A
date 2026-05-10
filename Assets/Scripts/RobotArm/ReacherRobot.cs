@@ -5,25 +5,20 @@ using Unity.MLAgents.Actuators;
 
 public class ReacherRobot : Agent
 {
-    public GameObject pendulumA; // j1
-    public GameObject pendulumB; // j2
-    public GameObject pendulumC; // j3
-    public GameObject pendulumD; // j4
-    public GameObject pendulumE; // j5
-    public GameObject pendulumF; // j6
+    public GameObject pendulumA;
+    public GameObject pendulumB;
+    public GameObject pendulumC;
+    public GameObject pendulumD;
+    public GameObject pendulumE;
+    public GameObject pendulumF;
 
     Rigidbody m_RbA, m_RbB, m_RbC, m_RbD, m_RbE, m_RbF;
 
     public GameObject brushTip;
     public GameObject canvas;
-    public DrawOnCanvas drawCanvas;
-
     public float torqueStrength = 150f;
 
-    // 범위 기록
-    Vector3 minBounds = new Vector3(float.MaxValue,  float.MaxValue,  float.MaxValue);
-    Vector3 maxBounds = new Vector3(float.MinValue, float.MinValue, float.MinValue);
-    float previousArea = 0f;
+    RobotBrush robotBrush;
 
     public override void Initialize()
     {
@@ -33,21 +28,18 @@ public class ReacherRobot : Agent
         m_RbD = pendulumD.GetComponent<Rigidbody>();
         m_RbE = pendulumE.GetComponent<Rigidbody>();
         m_RbF = pendulumF.GetComponent<Rigidbody>();
+
+        robotBrush = brushTip.GetComponent<RobotBrush>();
     }
 
     public override void OnEpisodeBegin()
     {
-        // 관절 초기화
         ResetJoint(pendulumA, m_RbA, new Vector3(-1.937307f, 0.6f,   1.24f));
         ResetJoint(pendulumB, m_RbB, new Vector3(-2.087307f, 0.6f,   1.24f));
         ResetJoint(pendulumC, m_RbC, new Vector3(-2.087307f, 1.425f, 1.24f));
         ResetJoint(pendulumD, m_RbD, new Vector3(-2.087307f, 1.425f, 1.24f));
         ResetJoint(pendulumE, m_RbE, new Vector3(-2.087307f, 2.05f,  1.24f));
         ResetJoint(pendulumF, m_RbF, new Vector3(-2.087307f, 2.16f,  1.24f));
-
-        minBounds = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
-        maxBounds = new Vector3(float.MinValue, float.MinValue, float.MinValue);
-        previousArea = 0f;
     }
 
     void ResetJoint(GameObject joint, Rigidbody rb, Vector3 localPos)
@@ -60,26 +52,28 @@ public class ReacherRobot : Agent
 
     public override void CollectObservations(VectorSensor sensor)
     {
-        sensor.AddObservation(pendulumA.transform.localRotation); // 4
-        sensor.AddObservation(pendulumB.transform.localRotation); // 4
-        sensor.AddObservation(pendulumC.transform.localRotation); // 4
-        sensor.AddObservation(pendulumD.transform.localRotation); // 4
-        sensor.AddObservation(pendulumE.transform.localRotation); // 4
-        sensor.AddObservation(pendulumF.transform.localRotation); // 4
+        // 관절 rotation (4 x 6 = 24)
+        sensor.AddObservation(pendulumA.transform.localRotation);
+        sensor.AddObservation(pendulumB.transform.localRotation);
+        sensor.AddObservation(pendulumC.transform.localRotation);
+        sensor.AddObservation(pendulumD.transform.localRotation);
+        sensor.AddObservation(pendulumE.transform.localRotation);
+        sensor.AddObservation(pendulumF.transform.localRotation);
 
-        sensor.AddObservation(m_RbA.angularVelocity); // 3
-        sensor.AddObservation(m_RbB.angularVelocity); // 3
-        sensor.AddObservation(m_RbC.angularVelocity); // 3
-        sensor.AddObservation(m_RbD.angularVelocity); // 3
-        sensor.AddObservation(m_RbE.angularVelocity); // 3
-        sensor.AddObservation(m_RbF.angularVelocity); // 3
+        // 관절 각속도 (3 x 6 = 18)
+        sensor.AddObservation(m_RbA.angularVelocity);
+        sensor.AddObservation(m_RbB.angularVelocity);
+        sensor.AddObservation(m_RbC.angularVelocity);
+        sensor.AddObservation(m_RbD.angularVelocity);
+        sensor.AddObservation(m_RbE.angularVelocity);
+        sensor.AddObservation(m_RbF.angularVelocity);
 
-        sensor.AddObservation(brushTip.transform.localPosition); // 3
+        // BrushTip → Canvas 방향벡터 (3)
+        Vector3 toCanvas = canvas.transform.position - brushTip.transform.position;
+        sensor.AddObservation(toCanvas.normalized);
 
-        Vector3 currentSize = Vector3.zero;
-        if (minBounds.x != float.MaxValue)
-            currentSize = maxBounds - minBounds;
-        sensor.AddObservation(currentSize); // 3
+        // BrushTip → Canvas 거리 (1)
+        sensor.AddObservation(toCanvas.magnitude);
 
         // 총합 = 46
     }
@@ -95,7 +89,7 @@ public class ReacherRobot : Agent
         m_RbE.AddTorque(pendulumE.transform.up      * act[4] * torqueStrength);
         m_RbF.AddTorque(pendulumF.transform.forward * act[5] * torqueStrength);
 
-        // 바닥 뚫기 & 박살 감지 (10step 이후부터만 체크)
+        // 바닥 뚫기 감지
         if (StepCount > 10)
         {
             bool fallen =
@@ -115,54 +109,37 @@ public class ReacherRobot : Agent
             }
         }
 
-        // BrushTip 범위 업데이트
-        Vector3 pos = brushTip.transform.position;
-        minBounds = Vector3.Min(minBounds, pos);
-        maxBounds = Vector3.Max(maxBounds, pos);
+        // Reward: 캔버스에 가까울수록
+        float dist = Vector3.Distance(brushTip.transform.position, canvas.transform.position);
+        AddReward(1f / (1f + dist) * 0.01f);
 
-        // 새 범위 탐색할수록 reward
-        float currentArea = (maxBounds - minBounds).magnitude;
-        float areaGain = currentArea - previousArea;
-        if (areaGain > 0)
-            AddReward(areaGain * 1.0f);
-        previousArea = currentArea;
+        // 캔버스에 닿으면 성공
+        if (robotBrush != null && robotBrush.IsTouching)
+        {
+            AddReward(1.0f);
+            //EndEpisode();
+        }
 
-        // 관절 속도 패널티
+        // 관절 과속 패널티
         foreach (var rb in new[] { m_RbA, m_RbB, m_RbC, m_RbD, m_RbE, m_RbF })
         {
             if (rb.angularVelocity.magnitude > 10f)
                 AddReward(-0.05f);
         }
     }
-    
+
     public override void Heuristic(in ActionBuffers actionsOut)
     {
         var act = actionsOut.ContinuousActions;
         act[0] = Input.GetAxis("Horizontal");
         act[1] = Input.GetAxis("Vertical");
-        act[2] = 0f;
-        act[3] = 0f;
-        act[4] = 0f;
-        act[5] = 0f;
-    }
-
-    void OnDrawGizmos()
-    {
-        if (minBounds.x == float.MaxValue) return;
-
-        Vector3 center = (minBounds + maxBounds) / 2f;
-        Vector3 size   = maxBounds - minBounds;
-        Gizmos.color = Color.green;
-        Gizmos.DrawWireCube(center, size);
-
-        if (brushTip != null)
-        {
-            Gizmos.color = Color.red;
-            Gizmos.DrawSphere(brushTip.transform.position, 0.05f);
-        }
-
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawSphere(minBounds, 0.05f);
-        Gizmos.DrawSphere(maxBounds, 0.05f);
+        act[2] = Input.GetKey(KeyCode.Q) ? 1f :
+                 Input.GetKey(KeyCode.E) ? -1f : 0f;
+        act[3] = Input.GetKey(KeyCode.R) ? 1f :
+                 Input.GetKey(KeyCode.F) ? -1f : 0f;
+        act[4] = Input.GetKey(KeyCode.T) ? 1f :
+                 Input.GetKey(KeyCode.G) ? -1f : 0f;
+        act[5] = Input.GetKey(KeyCode.Y) ? 1f :
+                 Input.GetKey(KeyCode.H) ? -1f : 0f;
     }
 }
