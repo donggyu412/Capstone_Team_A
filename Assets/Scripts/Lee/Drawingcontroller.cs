@@ -1,0 +1,416 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class DrawingController : MonoBehaviour
+{
+    [Header("관절 (j0 ~ j6 전부 연결)")]
+    public Transform j0;
+    public Transform j1;
+    public Transform j2;
+    public Transform j3;
+    public Transform j4;
+    public Transform j5;
+    public Transform j6;
+
+    [Header("참조")]
+    public Transform brushTip;
+    public Transform canvas;
+    public CanvasPainter canvasPainter;
+    public Material brushMaterial;
+    public ReacherRobot reacherRobot;
+
+    [Header("타겟 이미지")]
+    public Texture2D targetImage;
+
+    [Header("IK 설정")]
+    [Range(1, 30)] public int ikIterations = 8;
+    public float arrivalThreshold = 0.15f;
+    public float maxWaitTime = 0.5f;
+    [Range(0.01f, 0.5f)] public float ikSpeed = 0.1f;
+
+    [Header("획 설정")]
+    public int samplingStep = 6;
+    [Range(0f, 0.5f)] public float colorTolerance = 0.15f;
+    [Range(0.5f, 1f)] public float backgroundThreshold = 0.95f;
+    [Range(0.01f, 0.5f)] public float liftSpeed = 0.3f;
+    [Range(0.01f, 0.5f)] public float strokeSpeed = 0.05f;
+    [Range(2, 20)] public int interpolationSteps = 6;
+
+    [Header("캔버스 월드 크기")]
+    public float canvasWorldWidth = 4f;
+    public float canvasWorldHeight = 3f;
+
+    [Header("EEG 감정 상태 (0~1)")]
+    [Range(0f, 1f)] public float eegJoy = 0f;
+    [Range(0f, 1f)] public float eegSadness = 0f;
+    [Range(0f, 1f)] public float eegExcited = 0f;
+    [Range(0f, 1f)] public float eegCalm = 0f;
+
+    private Transform[] joints;
+    private Vector3[] jointAxes;
+    private Rigidbody[] allRigidbodies;
+    private Transform[] originalParents;
+
+    private Vector3 currentTarget;
+    private bool isMoving = false;
+    private bool isPainting = false;
+    private float baseStrokeSpeed;
+
+    private class StrokeGroup
+    {
+        public Color color;
+        public List<List<Vector2>> paths = new List<List<Vector2>>();
+    }
+    private List<StrokeGroup> strokeGroups = new List<StrokeGroup>();
+
+    void Start()
+    {
+        Debug.Log("canvas.up: " + canvas.up);
+        Debug.Log("canvas.position: " + canvas.position);
+        Debug.Log("brushTip.position: " + brushTip.position);
+        Vector3 toRobot = (brushTip.position - canvas.position).normalized;
+        float dot = Vector3.Dot(canvas.up, toRobot);
+        Debug.Log("내적: " + dot.ToString("F2") + " (1에 가까울수록 로봇 방향)");
+        baseStrokeSpeed = strokeSpeed;
+
+        joints = new Transform[] { j6, j5, j4, j3, j2, j1 };
+        jointAxes = new Vector3[]
+        {
+            Vector3.up, Vector3.right, Vector3.up,
+            Vector3.right, Vector3.right, Vector3.up,
+        };
+
+        var rbList = new List<Rigidbody>();
+        foreach (var t in new Transform[] { j0, j1, j2, j3, j4, j5, j6 })
+        {
+            if (t == null) continue;
+            var rb = t.GetComponent<Rigidbody>();
+            if (rb != null) rbList.Add(rb);
+        }
+        allRigidbodies = rbList.ToArray();
+
+        originalParents = new Transform[]
+        {
+            j0 != null ? j0.parent : null,
+            j1 != null ? j1.parent : null,
+            j2 != null ? j2.parent : null,
+            j3 != null ? j3.parent : null,
+            j4 != null ? j4.parent : null,
+            j5 != null ? j5.parent : null,
+            j6 != null ? j6.parent : null,
+        };
+
+        Debug.Log("[DrawingController] 초기화 완료");
+    }
+
+    void Update()
+    {
+        if (isMoving && brushTip != null)
+            SolveIK(currentTarget);
+
+        if (Input.GetKeyDown(KeyCode.Space) && !isPainting)
+        {
+            if (targetImage == null) { Debug.LogError("targetImage 없음!"); return; }
+            StartCoroutine(StartDrawing());
+        }
+    }
+
+    public void StartDrawingExternal()
+    {
+        if (isPainting) return;
+        if (targetImage == null) { Debug.LogError("targetImage 없음!"); return; }
+        StartCoroutine(StartDrawing());
+    }
+
+    public void SetEEG(float joy, float sadness, float excited, float calm)
+    {
+        eegJoy = Mathf.Clamp01(joy);
+        eegSadness = Mathf.Clamp01(sadness);
+        eegExcited = Mathf.Clamp01(excited);
+        eegCalm = Mathf.Clamp01(calm);
+    }
+
+    void BuildStrokeGroups()
+    {
+        strokeGroups.Clear();
+        int imgW = targetImage.width;
+        int imgH = targetImage.height;
+
+        Color[] pixels = targetImage.GetPixels();
+        Color bgColor = DetectBackgroundColor(pixels, imgW, imgH);
+        Debug.Log("감지된 배경색: " + bgColor);
+
+        for (int y = 0; y < imgH; y += samplingStep)
+        {
+            List<Vector2> currentPath = null;
+            Color currentColor = Color.clear;
+
+            for (int x = 0; x < imgW; x += samplingStep)
+            {
+                Color pixel = pixels[y * imgW + x];
+
+                if (IsBackground(pixel, bgColor))
+                {
+                    if (currentPath != null && currentPath.Count > 1)
+                        AddPathToGroup(currentColor, currentPath);
+                    currentPath = null;
+                    continue;
+                }
+
+                Vector2 uv = new Vector2((float)x / imgW, (float)y / imgH);
+
+                if (currentPath == null)
+                {
+                    currentPath = new List<Vector2> { uv };
+                    currentColor = pixel;
+                }
+                else if (ColorSimilar(pixel, currentColor))
+                {
+                    currentPath.Add(uv);
+                }
+                else
+                {
+                    if (currentPath.Count > 1)
+                        AddPathToGroup(currentColor, currentPath);
+                    currentPath = new List<Vector2> { uv };
+                    currentColor = pixel;
+                }
+            }
+
+            if (currentPath != null && currentPath.Count > 1)
+                AddPathToGroup(currentColor, currentPath);
+        }
+
+        Debug.Log("색상 그룹: " + strokeGroups.Count + "개");
+    }
+
+    Color DetectBackgroundColor(Color[] pixels, int imgW, int imgH)
+    {
+        if (pixels[0].a < 0.1f || pixels[imgW - 1].a < 0.1f)
+            return Color.clear;
+
+        Color tl = pixels[0];
+        Color tr = pixels[imgW - 1];
+        Color bl = pixels[(imgH - 1) * imgW];
+        Color br = pixels[(imgH - 1) * imgW + imgW - 1];
+
+        return new Color(
+            (tl.r + tr.r + bl.r + br.r) / 4f,
+            (tl.g + tr.g + bl.g + br.g) / 4f,
+            (tl.b + tr.b + bl.b + br.b) / 4f, 1f);
+    }
+
+    bool IsBackground(Color pixel, Color bgColor)
+    {
+        if (pixel.a < 0.1f) return true;
+
+        if (bgColor.a < 0.1f)
+            return (pixel.r + pixel.g + pixel.b) / 3f > backgroundThreshold;
+
+        float diff = Mathf.Abs(pixel.r - bgColor.r) +
+                     Mathf.Abs(pixel.g - bgColor.g) +
+                     Mathf.Abs(pixel.b - bgColor.b);
+        return diff < 0.15f;
+    }
+
+    void AddPathToGroup(Color color, List<Vector2> path)
+    {
+        StrokeGroup target = null;
+        foreach (var g in strokeGroups)
+            if (ColorSimilar(g.color, color)) { target = g; break; }
+        if (target == null) { target = new StrokeGroup { color = color }; strokeGroups.Add(target); }
+        target.paths.Add(new List<Vector2>(path));
+    }
+
+    Color ApplyEEGToColor(Color originalColor)
+    {
+        float h, s, v;
+        Color.RGBToHSV(originalColor, out h, out s, out v);
+
+        s += eegExcited * 0.3f;
+        s -= eegCalm * 0.2f;
+        v += eegJoy * 0.2f;
+        h = Mathf.Lerp(h, 0.6f, eegSadness * 0.4f);
+
+        s = Mathf.Clamp01(s);
+        v = Mathf.Clamp01(v);
+
+        Color result = Color.HSVToRGB(h, s, v);
+        result.a = originalColor.a;
+        return result;
+    }
+
+    float GetEEGStrokeSpeed()
+    {
+        float speed = baseStrokeSpeed;
+        speed += eegExcited * 0.15f;
+        speed -= eegCalm * 0.03f;
+        speed -= eegSadness * 0.02f;
+        speed += eegJoy * 0.05f;
+        return Mathf.Clamp(speed, 0.01f, 0.5f);
+    }
+
+    void BuildJointChain()
+    {
+        if (j1 != null) j1.SetParent(j0, true);
+        if (j2 != null) j2.SetParent(j1, true);
+        if (j3 != null) j3.SetParent(j2, true);
+        if (j4 != null) j4.SetParent(j3, true);
+        if (j5 != null) j5.SetParent(j4, true);
+        if (j6 != null) j6.SetParent(j5, true);
+    }
+
+    void RestoreJointChain()
+    {
+        Transform[] joints7 = { j0, j1, j2, j3, j4, j5, j6 };
+        for (int i = 0; i < joints7.Length; i++)
+            if (joints7[i] != null)
+                joints7[i].SetParent(originalParents[i], true);
+    }
+
+    void SolveIK(Vector3 target)
+    {
+        for (int iter = 0; iter < ikIterations; iter++)
+        {
+            if (Vector3.Distance(brushTip.position, target) < arrivalThreshold * 0.5f)
+                break;
+
+            for (int i = 0; i < joints.Length; i++)
+            {
+                Transform joint = joints[i];
+                if (joint == null) continue;
+
+                Vector3 axis = jointAxes[i];
+                Vector3 toTip = brushTip.position - joint.position;
+                Vector3 toTarget = target - joint.position;
+
+                Vector3 projTip = Vector3.ProjectOnPlane(toTip, axis);
+                Vector3 projTarget = Vector3.ProjectOnPlane(toTarget, axis);
+
+                if (projTip.magnitude < 0.001f || projTarget.magnitude < 0.001f) continue;
+
+                float angle = Vector3.SignedAngle(projTip, projTarget, axis);
+                float step = Mathf.Clamp(angle, -45f, 45f) * ikSpeed;
+                joint.Rotate(axis, step, Space.World);
+            }
+        }
+    }
+
+    IEnumerator StartDrawing()
+    {
+        isPainting = true;
+        baseStrokeSpeed = strokeSpeed;
+        Debug.Log("=== 그리기 시작 ===");
+
+        if (reacherRobot != null) reacherRobot.enabled = false;
+        SetKinematic(true);
+        yield return new WaitForSeconds(0.1f);
+
+        BuildJointChain();
+        yield return null;
+
+        yield return StartCoroutine(MoveSmoothly(
+            canvas.position + canvas.up * 0.1f, liftSpeed));
+
+        BuildStrokeGroups();
+
+        foreach (var group in strokeGroups)
+        {
+            foreach (var path in group.paths)
+            {
+                if (path.Count == 0) continue;
+
+                // 획마다 EEG 실시간 적용
+                Color eegColor = ApplyEEGToColor(group.color);
+                if (brushMaterial != null)
+                    brushMaterial.SetColor("_BrushColor", eegColor);
+
+                float currentStrokeSpeed = GetEEGStrokeSpeed();
+
+                yield return StartCoroutine(MoveSmoothly(
+                    UVToWorld(path[0]) - canvas.up * 0.2f, liftSpeed));
+
+                yield return StartCoroutine(MoveSmoothly(
+                    UVToWorld(path[0]), currentStrokeSpeed));
+
+                for (int i = 1; i < path.Count; i++)
+                {
+                    Vector3 from = UVToWorld(path[i - 1]);
+                    Vector3 to = UVToWorld(path[i]);
+
+                    for (int s = 1; s <= interpolationSteps; s++)
+                    {
+                        float t = (float)s / interpolationSteps;
+                        float smooth = t * t * (3f - 2f * t);
+                        currentTarget = Vector3.Lerp(from, to, smooth);
+                        isMoving = true;
+
+                        float elapsed = 0f;
+                        while (elapsed < maxWaitTime)
+                        {
+                            if (Vector3.Distance(brushTip.position, currentTarget) < arrivalThreshold)
+                                break;
+                            elapsed += Time.deltaTime;
+                            yield return null;
+                        }
+                    }
+                }
+
+                isMoving = false;
+            }
+        }
+
+        isMoving = false;
+        Debug.Log("=== 그리기 완료 ===");
+
+        RestoreJointChain();
+        SetKinematic(false);
+        if (reacherRobot != null) reacherRobot.enabled = true;
+        isPainting = false;
+    }
+
+    IEnumerator MoveSmoothly(Vector3 target, float speed)
+    {
+        isMoving = true;
+        float elapsed = 0f;
+        float timeout = 3f;
+        float prevIkSpeed = ikSpeed;
+
+        while (elapsed < timeout)
+        {
+            float dist = Vector3.Distance(brushTip.position, target);
+            ikSpeed = Mathf.Lerp(speed * 0.3f, speed, Mathf.Clamp01(dist));
+            currentTarget = target;
+
+            if (dist < arrivalThreshold) break;
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        ikSpeed = prevIkSpeed;
+        isMoving = false;
+    }
+
+    Vector3 UVToWorld(Vector2 uv)
+    {
+        float localX = (uv.x - 0.5f) * canvasWorldWidth;
+        float localZ = (uv.y - 0.5f) * canvasWorldHeight;
+
+        return canvas.transform.position
+             + canvas.transform.right * localX
+             + canvas.transform.forward * localZ
+             + canvas.transform.up * 0.1f;
+    }
+
+    void SetKinematic(bool value)
+    {
+        foreach (var rb in allRigidbodies)
+            if (rb != null) rb.isKinematic = value;
+    }
+
+    bool ColorSimilar(Color a, Color b)
+        => Mathf.Abs(a.r - b.r) < colorTolerance
+        && Mathf.Abs(a.g - b.g) < colorTolerance
+        && Mathf.Abs(a.b - b.b) < colorTolerance;
+}

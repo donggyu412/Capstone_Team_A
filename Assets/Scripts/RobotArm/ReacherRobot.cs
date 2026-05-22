@@ -134,12 +134,11 @@ public class ReacherRobot : Agent
                 AddReward(-0.05f);
         }
     }
-    
     public override void Heuristic(in ActionBuffers actionsOut)
     {
         var act = actionsOut.ContinuousActions;
-        act[0] = Input.GetAxis("Horizontal");
-        act[1] = Input.GetAxis("Vertical");
+        act[0] = 0f;
+        act[1] = 0f;
         act[2] = 0f;
         act[3] = 0f;
         act[4] = 0f;
