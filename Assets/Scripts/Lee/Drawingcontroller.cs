@@ -1,29 +1,30 @@
-using System.Collections;
+ï»¿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class DrawingController : MonoBehaviour
 {
-    [Header("°üÀı (j0 ~ j6 ÀüºÎ ¿¬°á)")]
+    [Header("ê´€ì ˆ (j0 ~ j6 ì „ë¶€ ì—°ê²°)")]
     public Transform j0, j1, j2, j3, j4, j5, j6;
 
-    [Header("ÂüÁ¶")]
+    [Header("ì°¸ì¡°")]
     public Transform brushTip;
     public Transform canvas;
     public CanvasPainter canvasPainter;
     public Material brushMaterial;
     public ReacherRobot reacherRobot;
+    public RobotBrush robotBrush;
 
-    [Header("Å¸°Ù ÀÌ¹ÌÁö (´ÜÀÏ Å×½ºÆ®¿ë)")]
+    [Header("íƒ€ê²Ÿ ì´ë¯¸ì§€ (ë‹¨ì¼ í…ŒìŠ¤íŠ¸ìš©)")]
     public Texture2D targetImage;
 
-    [Header("IK ¼³Á¤")]
+    [Header("IK ì„¤ì •")]
     [Range(1, 30)] public int ikIterations = 8;
     public float arrivalThreshold = 0.15f;
     public float maxWaitTime = 0.5f;
     [Range(0.01f, 0.5f)] public float ikSpeed = 0.1f;
 
-    [Header("È¹ ¼³Á¤")]
+    [Header("íš ì„¤ì •")]
     public int samplingStep = 8;
     [Range(0f, 0.5f)] public float colorTolerance = 0.15f;
     [Range(0.5f, 1f)] public float backgroundThreshold = 0.95f;
@@ -31,11 +32,11 @@ public class DrawingController : MonoBehaviour
     [Range(0.01f, 0.5f)] public float strokeSpeed = 0.08f;
     [Range(2, 20)] public int interpolationSteps = 5;
 
-    [Header("Äµ¹ö½º ¿ùµå Å©±â")]
+    [Header("ìº”ë²„ìŠ¤ ì›”ë“œ í¬ê¸°")]
     public float canvasWorldWidth = 4f;
     public float canvasWorldHeight = 3f;
 
-    [Header("EEG °¨Á¤ »óÅÂ (0~1)")]
+    [Header("EEG ê°ì • ìƒíƒœ (0~1)")]
     [Range(0f, 1f)] public float eegJoy = 0f;
     [Range(0f, 1f)] public float eegSadness = 0f;
     [Range(0f, 1f)] public float eegExcited = 0f;
@@ -82,7 +83,7 @@ public class DrawingController : MonoBehaviour
             j4?.parent, j5?.parent, j6?.parent,
         };
 
-        Debug.Log("[DrawingController] ÃÊ±âÈ­ ¿Ï·á");
+        Debug.Log("[DrawingController] ì´ˆê¸°í™” ì™„ë£Œ");
     }
 
     void Update()
@@ -92,19 +93,19 @@ public class DrawingController : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.Space) && !isPainting)
         {
-            if (targetImage == null) { Debug.LogError("targetImage ¾øÀ½!"); return; }
+            if (targetImage == null) { Debug.LogError("targetImage ì—†ìŒ!"); return; }
             StartCoroutine(StartDrawing(new List<Texture2D> { targetImage }));
         }
     }
 
-    // ´ÜÀÏ ÀÌ¹ÌÁö Å×½ºÆ®¿ë
+    // ë‹¨ì¼ ì´ë¯¸ì§€ í…ŒìŠ¤íŠ¸ìš©
     public void StartDrawingExternal()
     {
         if (isPainting || targetImage == null) return;
         StartCoroutine(StartDrawing(new List<Texture2D> { targetImage }));
     }
 
-    // CreativeDrawingManager¿¡¼­ ²Ş ÀÌ¹ÌÁöµé Àü´Ş
+    // CreativeDrawingManagerì—ì„œ ê¿ˆ ì´ë¯¸ì§€ë“¤ ì „ë‹¬
     public void StartDreamDrawing(List<Texture2D> dreamImages)
     {
         if (isPainting || dreamImages == null || dreamImages.Count == 0) return;
@@ -119,15 +120,15 @@ public class DrawingController : MonoBehaviour
         eegCalm = Mathf.Clamp01(calm);
     }
 
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // ¸ŞÀÎ µå·ÎÀ× ÄÚ·çÆ¾
-    // ÀÌ¹ÌÁö°¡ ¿©·¯ ÀåÀÌ¸é ²Ş ÀüÈ¯ È¿°ú Àû¿ë
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+    // -------------------------------------------------------------
+    // ë©”ì¸ ë“œë¡œì‰ ì½”ë£¨í‹´
+    // ì´ë¯¸ì§€ê°€ ì—¬ëŸ¬ ì¥ì´ë©´ ê¿ˆ ì „í™˜ íš¨ê³¼ ì ìš©
+    // -------------------------------------------------------------
     IEnumerator StartDrawing(List<Texture2D> images)
     {
         isPainting = true;
         baseStrokeSpeed = strokeSpeed;
-        Debug.Log("=== ²Ş µå·ÎÀ× ½ÃÀÛ (" + images.Count + "Àå) ===");
+        Debug.Log("=== ê¿ˆ ë“œë¡œì‰ ì‹œì‘ (" + images.Count + "ì¥) ===");
 
         if (reacherRobot != null) reacherRobot.enabled = false;
         SetKinematic(true);
@@ -144,13 +145,13 @@ public class DrawingController : MonoBehaviour
             Texture2D currentImage = images[imgIdx];
             Texture2D nextImage = imgIdx + 1 < images.Count ? images[imgIdx + 1] : null;
 
-            Debug.Log("=== ²Ş ÀÌ¹ÌÁö " + (imgIdx + 1) + "/" + images.Count + " ±×¸®±â ===");
+            Debug.Log("=== ê¿ˆ ì´ë¯¸ì§€ " + (imgIdx + 1) + "/" + images.Count + " ê·¸ë¦¬ê¸° ===");
 
-            // ÇöÀç ÀÌ¹ÌÁö È¹ ±×·ì »ı¼º
+            // í˜„ì¬ ì´ë¯¸ì§€ íš ê·¸ë£¹ ìƒì„±
             List<StrokeGroup> currentGroups = BuildStrokeGroups(currentImage);
             List<List<Vector2>> allCurrentPaths = GetAllPathsSorted();
 
-            // ´ÙÀ½ ÀÌ¹ÌÁö È¹ ±×·ì »ı¼º (ÀüÈ¯¿ë)
+            // ë‹¤ìŒ ì´ë¯¸ì§€ íš ê·¸ë£¹ ìƒì„± (ì „í™˜ìš©)
             List<List<Vector2>> allNextPaths = null;
             if (nextImage != null)
             {
@@ -158,13 +159,13 @@ public class DrawingController : MonoBehaviour
                 allNextPaths = GetAllPathsSorted();
             }
 
-            // ÇöÀç ÀÌ¹ÌÁö ±×¸®±â (·£´ı ±×·È´Ù Áö¿ì±â Æ÷ÇÔ)
+            // í˜„ì¬ ì´ë¯¸ì§€ ê·¸ë¦¬ê¸° (ëœë¤ ê·¸ë ¸ë‹¤ ì§€ìš°ê¸° í¬í•¨)
             yield return StartCoroutine(DrawWithChildlikeStyle(currentGroups, allCurrentPaths));
 
-            // ´ÙÀ½ ÀÌ¹ÌÁö°¡ ÀÖÀ¸¸é ÀüÈ¯ È¿°ú
+            // ë‹¤ìŒ ì´ë¯¸ì§€ê°€ ìˆìœ¼ë©´ ì „í™˜ íš¨ê³¼
             if (nextImage != null && allNextPaths != null)
             {
-                Debug.Log("=== ²Ş ÀÌ¹ÌÁö ÀüÈ¯ ===");
+                Debug.Log("=== ê¿ˆ ì´ë¯¸ì§€ ì „í™˜ ===");
                 yield return StartCoroutine(TransitionToNextImage(
                     currentGroups, allCurrentPaths,
                     BuildStrokeGroups(nextImage), allNextPaths));
@@ -172,15 +173,16 @@ public class DrawingController : MonoBehaviour
         }
 
         isMoving = false;
-        Debug.Log("=== ²Ş µå·ÎÀ× ¿Ï·á ===");
+        Debug.Log("=== ê¿ˆ ë“œë¡œì‰ ì™„ë£Œ ===");
 
         RestoreJointChain();
         SetKinematic(false);
         if (reacherRobot != null) reacherRobot.enabled = true;
+        if (robotBrush != null) robotBrush.enabled = true;
         isPainting = false;
     }
 
-    // ÀÓ½Ã ÀúÀå¿ë
+    // ì„ì‹œ ì €ì¥ìš©
     private List<StrokeGroup> lastBuiltGroups = new List<StrokeGroup>();
 
     List<StrokeGroup> BuildStrokeGroups(Texture2D image)
@@ -191,8 +193,8 @@ public class DrawingController : MonoBehaviour
         Color[] pixels = image.GetPixels();
         Color bgColor = DetectBackgroundColor(pixels, imgW, imgH);
 
-        // ¦¡¦¡ 1´Ü°è: Sobel ¿§Áö °¨Áö ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-        // °¢ ÇÈ¼¿ÀÇ ¹à±â º¯È­(gradient)¸¦ °è»êÇØ¼­ ¿§Áö(À±°û¼±) ÇÈ¼¿ °¨Áö
+        // -- 1ë‹¨ê³„: Sobel ì—£ì§€ ê°ì§€ ------------------------------
+        // ê° í”½ì…€ì˜ ë°ê¸° ë³€í™”(gradient)ë¥¼ ê³„ì‚°í•´ì„œ ì—£ì§€(ìœ¤ê³½ì„ ) í”½ì…€ ê°ì§€
         float[,] edgeMap = new float[imgW, imgH];
         float maxEdge = 0f;
 
@@ -203,7 +205,7 @@ public class DrawingController : MonoBehaviour
                 Color c = pixels[y * imgW + x];
                 if (IsBackground(c, bgColor)) continue;
 
-                // ÁÖº¯ ÇÈ¼¿ ¹à±â
+                // ì£¼ë³€ í”½ì…€ ë°ê¸°
                 float tl = GetBrightness(pixels[(y - 1) * imgW + (x - 1)]);
                 float tm = GetBrightness(pixels[(y - 1) * imgW + x]);
                 float tr = GetBrightness(pixels[(y - 1) * imgW + (x + 1)]);
@@ -213,7 +215,7 @@ public class DrawingController : MonoBehaviour
                 float bm = GetBrightness(pixels[(y + 1) * imgW + x]);
                 float br2 = GetBrightness(pixels[(y + 1) * imgW + (x + 1)]);
 
-                // Sobel ÇÊÅÍ
+                // Sobel í•„í„°
                 float gx = -tl - 2 * ml - bl2 + tr + 2 * mr + br2;
                 float gy = -tl - 2 * tm - tr + bl2 + 2 * bm + br2;
                 float g = Mathf.Sqrt(gx * gx + gy * gy);
@@ -223,20 +225,20 @@ public class DrawingController : MonoBehaviour
             }
         }
 
-        // ¦¡¦¡ 2´Ü°è: ¿§Áö ÇÈ¼¿À» ¿¬°áµÈ È¹À¸·Î ¹­±â ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-        float edgeThreshold = maxEdge * 0.3f; // »óÀ§ 70% ¿§Áö¸¸ »ç¿ë
+        // -- 2ë‹¨ê³„: ì—£ì§€ í”½ì…€ì„ ì—°ê²°ëœ íšìœ¼ë¡œ ë¬¶ê¸° ---------------
+        float edgeThreshold = maxEdge * 0.3f; // ìƒìœ„ 70% ì—£ì§€ë§Œ ì‚¬ìš©
         bool[,] visited = new bool[imgW, imgH];
 
-        // ¿§Áö ÇÈ¼¿ ¼öÁı
+        // ì—£ì§€ í”½ì…€ ìˆ˜ì§‘
         List<Vector2Int> edgePixels = new List<Vector2Int>();
         for (int y = 1; y < imgH - 1; y += samplingStep)
             for (int x = 1; x < imgW - 1; x += samplingStep)
                 if (edgeMap[x, y] > edgeThreshold && !IsBackground(pixels[y * imgW + x], bgColor))
                     edgePixels.Add(new Vector2Int(x, y));
 
-        Debug.Log("¿§Áö ÇÈ¼¿ ¼ö: " + edgePixels.Count);
+        Debug.Log("ì—£ì§€ í”½ì…€ ìˆ˜: " + edgePixels.Count);
 
-        // ¿§Áö ÇÈ¼¿À» ¿¬°áµÈ °æ·Î·Î ¹­±â (°¡±î¿î ÇÈ¼¿³¢¸® ¿¬°á)
+        // ì—£ì§€ í”½ì…€ì„ ì—°ê²°ëœ ê²½ë¡œë¡œ ë¬¶ê¸° (ê°€ê¹Œìš´ í”½ì…€ë¼ë¦¬ ì—°ê²°)
         bool[] used = new bool[edgePixels.Count];
         int searchRadius = samplingStep * 3;
 
@@ -251,7 +253,7 @@ public class DrawingController : MonoBehaviour
             path.Add(new Vector2((float)edgePixels[current].x / imgW,
                                  (float)edgePixels[current].y / imgH));
 
-            // °¡Àå °¡±î¿î ¹Ì»ç¿ë ¿§Áö ÇÈ¼¿·Î ¿¬°á
+            // ê°€ì¥ ê°€ê¹Œìš´ ë¯¸ì‚¬ìš© ì—£ì§€ í”½ì…€ë¡œ ì—°ê²°
             for (int step = 0; step < 500; step++)
             {
                 int nearest = -1;
@@ -278,7 +280,7 @@ public class DrawingController : MonoBehaviour
                 AddPathToGroup(lastBuiltGroups, pathColor, path);
         }
 
-        // ¦¡¦¡ 3´Ü°è: ³»ºÎ »ö»ó Ã¤¿ì±â (»ö»ó ¿µ¿ªº° °¡·Î È¹) ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+        // -- 3ë‹¨ê³„: ë‚´ë¶€ ìƒ‰ìƒ ì±„ìš°ê¸° (ìƒ‰ìƒ ì˜ì—­ë³„ ê°€ë¡œ íš) --------
         for (int y = 0; y < imgH; y += samplingStep * 2)
         {
             List<Vector2> fillPath = null;
@@ -308,9 +310,9 @@ public class DrawingController : MonoBehaviour
                 AddPathToGroup(lastBuiltGroups, fillColor, fillPath);
         }
 
-        Debug.Log("»ö»ó ±×·ì: " + lastBuiltGroups.Count + "°³");
+        Debug.Log("ìƒ‰ìƒ ê·¸ë£¹: " + lastBuiltGroups.Count + "ê°œ");
 
-        // ¾îµÎ¿î »ö(°ËÀº À±°û¼±) ¸ÕÀú, ¹àÀº »ö ³ªÁß¿¡ Á¤·Ä
+        // ì–´ë‘ìš´ ìƒ‰(ê²€ì€ ìœ¤ê³½ì„ ) ë¨¼ì €, ë°ì€ ìƒ‰ ë‚˜ì¤‘ì— ì •ë ¬
         lastBuiltGroups.Sort((a, b) => {
             float ha, sa, va, hb, sb, vb;
             Color.RGBToHSV(a.color, out ha, out sa, out va);
@@ -323,14 +325,14 @@ public class DrawingController : MonoBehaviour
 
     float GetBrightness(Color c) => (c.r + c.g + c.b) / 3f;
 
-    // ÇöÀç º× À§Ä¡¿¡¼­ °¡±î¿î È¹ ¼ø¼­·Î Á¤·Ä
+    // í˜„ì¬ ë¶“ ìœ„ì¹˜ì—ì„œ ê°€ê¹Œìš´ íš ìˆœì„œë¡œ ì •ë ¬
     List<List<Vector2>> GetAllPathsSorted()
     {
         List<List<Vector2>> allPaths = new List<List<Vector2>>();
         foreach (var g in lastBuiltGroups)
             allPaths.AddRange(g.paths);
 
-        // Greedy: ÇöÀç À§Ä¡¿¡¼­ °¡Àå °¡±î¿î È¹ºÎÅÍ
+        // Greedy: í˜„ì¬ ìœ„ì¹˜ì—ì„œ ê°€ì¥ ê°€ê¹Œìš´ íšë¶€í„°
         List<List<Vector2>> sorted = new List<List<Vector2>>();
         List<bool> used = new List<bool>(new bool[allPaths.Count]);
         Vector2 currentPos = new Vector2(0.5f, 0.5f);
@@ -353,9 +355,9 @@ public class DrawingController : MonoBehaviour
         return sorted;
     }
 
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // ¾î¸°¾ÆÀÌÃ³·³ ±×¸®±â (·£´ı ±×·È´Ù Áö¿ì±â)
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+    // -------------------------------------------------------------
+    // ì–´ë¦°ì•„ì´ì²˜ëŸ¼ ê·¸ë¦¬ê¸° (ëœë¤ ê·¸ë ¸ë‹¤ ì§€ìš°ê¸°)
+    // -------------------------------------------------------------
     IEnumerator DrawWithChildlikeStyle(List<StrokeGroup> groups, List<List<Vector2>> sortedPaths)
     {
         Dictionary<List<Vector2>, Color> pathColorMap = new Dictionary<List<Vector2>, Color>();
@@ -379,10 +381,10 @@ public class DrawingController : MonoBehaviour
         }
     }
 
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // ÀÌ¹ÌÁö ÀüÈ¯ È¿°ú
-    // Áö¿ì±â ¾øÀÌ ´ÙÀ½ ÀÌ¹ÌÁö¸¦ ¹Ù·Î µ¡±×¸®±â
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+    // -------------------------------------------------------------
+    // ì´ë¯¸ì§€ ì „í™˜ íš¨ê³¼
+    // ì§€ìš°ê¸° ì—†ì´ ë‹¤ìŒ ì´ë¯¸ì§€ë¥¼ ë°”ë¡œ ë§ê·¸ë¦¬ê¸°
+    // -------------------------------------------------------------
     IEnumerator TransitionToNextImage(
         List<StrokeGroup> curGroups, List<List<Vector2>> curPaths,
         List<StrokeGroup> nextGroups, List<List<Vector2>> nextPaths)
@@ -392,7 +394,7 @@ public class DrawingController : MonoBehaviour
             foreach (var path in g.paths)
                 nextColorMap[path] = g.color;
 
-        // Áö¿ì±â ¾øÀÌ ¹Ù·Î µ¡±×¸®±â
+        // ì§€ìš°ê¸° ì—†ì´ ë°”ë¡œ ë§ê·¸ë¦¬ê¸°
         foreach (var path in nextPaths)
         {
             Color nextColor = nextColorMap.ContainsKey(path) ? nextColorMap[path] : Color.black;
@@ -405,9 +407,9 @@ public class DrawingController : MonoBehaviour
         }
     }
 
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-    // È¹ ±×¸®±â
-    // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+    // -------------------------------------------------------------
+    // íš ê·¸ë¦¬ê¸°
+    // -------------------------------------------------------------
     IEnumerator DrawPath(List<Vector2> path, float speed, Color color)
     {
         if (path.Count == 0) yield break;
@@ -417,14 +419,16 @@ public class DrawingController : MonoBehaviour
         if (canvasPainter != null)
             canvasPainter.inkColor = color;
 
-        // º× µé±â
+        // ë¶“ ë“¤ê¸° â€” RobotBrush ë¹„í™œì„±í™” (ì´ë™ ì¤‘ ì°íˆì§€ ì•Šê²Œ)
+        if (robotBrush != null) robotBrush.enabled = false;
         yield return StartCoroutine(MoveSmoothly(
             UVToWorld(path[0]) - canvas.up * 0.2f, liftSpeed));
 
-        // º× ³»¸®±â
+        // ë¶“ ë‚´ë¦¬ê¸° â€” ì•„ì§ ë¹„í™œì„±í™” ìœ ì§€
         yield return StartCoroutine(MoveSmoothly(UVToWorld(path[0]), speed));
 
-        // È¹ ±×¸®±â
+        // íš ê·¸ë¦¬ê¸° â€” RobotBrush í™œì„±í™” (ìº”ë²„ìŠ¤ì— ë‹¿ìœ¼ë©´ ìë™ìœ¼ë¡œ ê·¸ë¦¼)
+        if (robotBrush != null) robotBrush.enabled = true;
         for (int i = 1; i < path.Count; i++)
         {
             Vector3 from = UVToWorld(path[i - 1]);
@@ -447,15 +451,17 @@ public class DrawingController : MonoBehaviour
             }
         }
 
+        // íš ëë‚˜ë©´ ë‹¤ì‹œ ë¹„í™œì„±í™”
+        if (robotBrush != null) robotBrush.enabled = false;
         isMoving = false;
     }
 
     Color DetectBackgroundColor(Color[] pixels, int imgW, int imgH)
     {
-        // 1. Åõ¸í ¹è°æ Ã¼Å©
+        // 1. íˆ¬ëª… ë°°ê²½ ì²´í¬
         if (pixels[0].a < 0.1f || pixels[imgW - 1].a < 0.1f)
         {
-            Debug.Log("Åõ¸í ¹è°æ °¨Áö");
+            Debug.Log("íˆ¬ëª… ë°°ê²½ ê°ì§€");
             return Color.clear;
         }
 
@@ -464,7 +470,7 @@ public class DrawingController : MonoBehaviour
         Color bl = pixels[(imgH - 1) * imgW];
         Color br = pixels[(imgH - 1) * imgW + imgW - 1];
 
-        // 2. ¸ğ¼­¸® 4°³°¡ ºñ½ÁÇÑ »öÀÎÁö È®ÀÎ
+        // 2. ëª¨ì„œë¦¬ 4ê°œê°€ ë¹„ìŠ·í•œ ìƒ‰ì¸ì§€ í™•ì¸
         float diffH = ColorDistance(tl, tr);
         float diffV = ColorDistance(tl, bl);
         float diffD = ColorDistance(tl, br);
@@ -472,17 +478,17 @@ public class DrawingController : MonoBehaviour
 
         if (maxDiff < 0.25f)
         {
-            // ¸ğ¼­¸®°¡ ºñ½ÁÇÑ »ö ¡æ ±×°Ô ¹è°æ
+            // ëª¨ì„œë¦¬ê°€ ë¹„ìŠ·í•œ ìƒ‰ -> ê·¸ê²Œ ë°°ê²½
             Color avg = new Color(
                 (tl.r + tr.r + bl.r + br.r) / 4f,
                 (tl.g + tr.g + bl.g + br.g) / 4f,
                 (tl.b + tr.b + bl.b + br.b) / 4f, 1f);
-            Debug.Log("´Ü»ö ¹è°æ °¨Áö: " + avg);
+            Debug.Log("ë‹¨ìƒ‰ ë°°ê²½ ê°ì§€: " + avg);
             return avg;
         }
 
-        // 3. ¸ğ¼­¸®°¡ ´Ù ´Ù¸¥ »ö ¡æ ¹è°æ ¾øÀ½ (ÀüÃ¼ ±×¸®±â)
-        Debug.Log("¹è°æ ¾øÀ½ ¡æ ÀüÃ¼ ±×¸®±â");
+        // 3. ëª¨ì„œë¦¬ê°€ ë‹¤ ë‹¤ë¥¸ ìƒ‰ -> ë°°ê²½ ì—†ìŒ (ì „ì²´ ê·¸ë¦¬ê¸°)
+        Debug.Log("ë°°ê²½ ì—†ìŒ -> ì „ì²´ ê·¸ë¦¬ê¸°");
         return Color.clear;
     }
 
@@ -498,13 +504,13 @@ public class DrawingController : MonoBehaviour
     {
         if (pixel.a < 0.1f) return true;
 
-        // ¹è°æ ¾øÀ½ or Åõ¸í ¹è°æ ¡æ ¹à±â·Î ÆÇ´Ü
+        // ë°°ê²½ ì—†ìŒ or íˆ¬ëª… ë°°ê²½ -> ë°ê¸°ë¡œ íŒë‹¨
         if (bgColor.a < 0.1f)
             return (pixel.r + pixel.g + pixel.b) / 3f > backgroundThreshold;
 
         float diff = ColorDistance(pixel, bgColor);
 
-        // ¹è°æÀÌ ¾îµÎ¿ì¸é ´õ ¾ö°İÇÏ°Ô (°ËÀº À±°û¼± ¿ÀÀÎ ¹æÁö)
+        // ë°°ê²½ì´ ì–´ë‘ìš°ë©´ ë” ì—„ê²©í•˜ê²Œ (ê²€ì€ ìœ¤ê³½ì„  ì˜¤ì¸ ë°©ì§€)
         float bgBrightness = (bgColor.r + bgColor.g + bgColor.b) / 3f;
         float threshold = bgBrightness < 0.2f ? 0.25f : 0.15f;
 
