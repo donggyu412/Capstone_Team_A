@@ -5,7 +5,7 @@ using UnityEngine;
 public class ImageToPainter : MonoBehaviour
 {
     [Header("참조")]
-    public RobotIKSolver ikSolver;      // ← 추가: RobotIKSolver 연결
+    public RobotIKSolver ikSolver;
     public Transform brushTip;
     public RobotBrush robotBrush;
     public Transform canvas;
@@ -71,9 +71,9 @@ public class ImageToPainter : MonoBehaviour
 
         foreach (var group in strokeGroups)
         {
-            // 붓 색상 설정
-            if (robotBrush != null && robotBrush.brushMaterial != null)
-                robotBrush.brushMaterial.SetColor("_BrushColor", group.color);
+            // 붓 색상 설정 (brushes[0] = BrushMaterial)
+            if (robotBrush != null && robotBrush.brushes != null && robotBrush.brushes[0] != null)
+                robotBrush.brushes[0].SetColor("_BrushColor", group.color);
 
             yield return new WaitForSeconds(0.1f);
 
@@ -81,10 +81,8 @@ public class ImageToPainter : MonoBehaviour
             {
                 if (path.Count == 0) continue;
 
-                // 획 시작 전 브러쉬 들어서 이동
                 yield return StartCoroutine(MoveTo(path[0], liftBrush: true));
 
-                // 획 그리기
                 foreach (var uv in path)
                     yield return StartCoroutine(MoveTo(uv, liftBrush: false));
             }
@@ -98,11 +96,9 @@ public class ImageToPainter : MonoBehaviour
     {
         Vector3 worldPos = UVToWorld(uv);
 
-        // 브러쉬 들기: 캔버스에서 살짝 앞으로 띄움
         if (liftBrush)
             worldPos += canvas.transform.forward * 0.15f;
 
-        // ← 핵심 변경: 자체 IK 대신 RobotIKSolver.SetTarget() 호출
         ikSolver.SetTarget(worldPos);
 
         float elapsed = 0f;
