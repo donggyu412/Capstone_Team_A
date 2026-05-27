@@ -7,7 +7,7 @@ using UnityEngine.Networking;
 using TMPro;
 
 /// <summary>
-/// 단어 입력 -> Claude API 프롬프트 생성 -> DALL-E 3 이미지 생성 -> 로봇팔 드로잉
+/// 단어 입력 -> Claude API 꿈 스토리 3장 프롬프트 생성 -> GPT Image 3장 생성 -> 로봇팔 드로잉
 /// </summary>
 public class CreativeDrawingManager : MonoBehaviour
 {
@@ -24,14 +24,22 @@ public class CreativeDrawingManager : MonoBehaviour
     public GameObject wordTagPrefab;
     public TMP_Text statusText;
     public TMP_Text promptDisplayText;
-    public RawImage previewImage;
+    public RawImage previewImage1;
+    public RawImage previewImage2;
+    public RawImage previewImage3;
 
     [Header("연결")]
     public DrawingController drawingController;
 
+    [Header("꿈 이미지 설정")]
+    [Tooltip("생성할 꿈 이미지 수 (2~3)")]
+    [Range(2, 3)] public int dreamImageCount = 3;
+
     private List<string> words = new List<string>();
     private List<GameObject> wordTagObjects = new List<GameObject>();
     private bool isProcessing = false;
+    private List<Texture2D> dreamImages = new List<Texture2D>();
+    private List<string> dreamPrompts = new List<string>();
 
     void Start()
     {
@@ -46,11 +54,7 @@ public class CreativeDrawingManager : MonoBehaviour
     {
         string word = wordInputField.text.Trim();
         if (string.IsNullOrEmpty(word)) return;
-        if (words.Count >= 10)
-        {
-            SetStatus("Maximum 10 words allowed.");
-            return;
-        }
+        if (words.Count >= 10) { SetStatus("Maximum 10 words allowed."); return; }
 
         words.Add(word);
         wordInputField.text = "";
@@ -69,7 +73,6 @@ public class CreativeDrawingManager : MonoBehaviour
                 int idx = words.Count - 1;
                 deleteBtn.onClick.AddListener(() => RemoveWord(idx, tagRef));
             }
-
             wordTagObjects.Add(tag);
         }
 
@@ -80,19 +83,14 @@ public class CreativeDrawingManager : MonoBehaviour
     void RemoveWord(int index, GameObject tagObject)
     {
         if (index < words.Count) words.RemoveAt(index);
-        if (tagObject != null)
-        {
-            wordTagObjects.Remove(tagObject);
-            Destroy(tagObject);
-        }
+        if (tagObject != null) { wordTagObjects.Remove(tagObject); Destroy(tagObject); }
         UpdateUI();
     }
 
     void ClearWords()
     {
         words.Clear();
-        foreach (var tag in wordTagObjects)
-            if (tag != null) Destroy(tag);
+        foreach (var tag in wordTagObjects) if (tag != null) Destroy(tag);
         wordTagObjects.Clear();
         UpdateUI();
         SetStatus("Cleared.");
@@ -101,11 +99,7 @@ public class CreativeDrawingManager : MonoBehaviour
     void OnStartButtonClicked()
     {
         if (isProcessing) return;
-        if (words.Count < 2)
-        {
-            SetStatus("Please enter at least 2 words.");
-            return;
-        }
+        if (words.Count < 2) { SetStatus("Please enter at least 2 words."); return; }
         StartCoroutine(ProcessPipeline());
     }
 
@@ -113,71 +107,87 @@ public class CreativeDrawingManager : MonoBehaviour
     {
         isProcessing = true;
         startDrawingButton.interactable = false;
+        dreamImages.Clear();
+        dreamPrompts.Clear();
 
-        // 1단계: Claude API로 창의적 프롬프트 생성
-        SetStatus("Claude AI is generating a creative prompt...");
-        string prompt = "";
-        yield return StartCoroutine(GeneratePromptWithClaude(words, result => prompt = result));
+        // 1단계: Claude API로 꿈 스토리 프롬프트 3장 생성
+        SetStatus("Claude AI is dreaming... creating " + dreamImageCount + " dream scenes...");
+        yield return StartCoroutine(GenerateDreamPromptsWithClaude(words));
 
-        if (string.IsNullOrEmpty(prompt))
+        if (dreamPrompts.Count == 0)
         {
-            SetStatus("Failed to generate prompt. Please try again.");
+            SetStatus("Failed to generate dream prompts. Please try again.");
             isProcessing = false;
             startDrawingButton.interactable = true;
             yield break;
         }
 
         if (promptDisplayText != null)
-            promptDisplayText.text = "Generated Prompt:\n" + prompt;
+            promptDisplayText.text = "Dream Story:\n" + string.Join("\n\n", dreamPrompts);
 
-        // 2단계: DALL-E 3으로 이미지 생성
-        SetStatus("DALL-E 3 is generating an image...");
-        Texture2D generatedImage = null;
-        yield return StartCoroutine(GenerateImageWithDallE(prompt, result => generatedImage = result));
-
-        if (generatedImage == null)
+        // 2단계: 각 프롬프트로 이미지 생성
+        RawImage[] previews = { previewImage1, previewImage2, previewImage3 };
+        for (int i = 0; i < dreamPrompts.Count; i++)
         {
-            SetStatus("Failed to generate image. Please try again.");
+            SetStatus("Generating dream image " + (i + 1) + "/" + dreamPrompts.Count + "...");
+            Texture2D img = null;
+            yield return StartCoroutine(GenerateImageWithDallE(dreamPrompts[i], result => img = result));
+
+            if (img == null)
+            {
+                SetStatus("Failed to generate image " + (i + 1) + ". Skipping...");
+                continue;
+            }
+
+            dreamImages.Add(img);
+
+            // 각 이미지 생성되면 해당 미리보기에 표시
+            if (i < previews.Length && previews[i] != null)
+                previews[i].texture = img;
+
+            Debug.Log("꿈 이미지 " + (i + 1) + " 생성 완료");
+        }
+
+        if (dreamImages.Count == 0)
+        {
+            SetStatus("No images generated. Please try again.");
             isProcessing = false;
             startDrawingButton.interactable = true;
             yield break;
         }
 
-        if (previewImage != null)
-            previewImage.texture = generatedImage;
-
         // 3단계: 로봇팔 드로잉 시작
-        SetStatus("Robot arm is starting to draw...");
+        SetStatus("Robot arm is starting to draw the dream...");
         if (drawingController != null)
-        {
-            drawingController.targetImage = generatedImage;
-            drawingController.StartDrawingExternal();
-        }
+            drawingController.StartDreamDrawing(dreamImages);
 
         isProcessing = false;
         startDrawingButton.interactable = true;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Claude API: 단어들을 조합해서 창의적인 DALL-E 프롬프트 생성
+    // Claude API: 키워드로 꿈 스토리 N장 프롬프트 생성
     // ─────────────────────────────────────────────────────────────
-    IEnumerator GeneratePromptWithClaude(List<string> inputWords, System.Action<string> callback)
+    IEnumerator GenerateDreamPromptsWithClaude(List<string> inputWords)
     {
         string wordList = string.Join(", ", inputWords);
-        string userMessage = "Create a creative DALL-E 3 image prompt by combining these words: " + wordList + ". " +
-                             "Requirements for the image: " +
-                             "1. Transparent or plain background. " +
-                             "2. Simple bold outlines. " +
-                             "3. Flat colors with clearly separated color regions. " +
-                             "4. Vector art or sticker style. " +
-                             "5. No complex textures or gradients. " +
-                             "6. Strong contrast between elements. " +
-                             "7. Creatively synthesize all the concepts into one unique scene. " +
-                             "Output only the image prompt in English, nothing else.";
+        string userMessage =
+            "You are helping a child dream. Given these keywords: " + wordList + "\n\n" +
+            "Create exactly " + dreamImageCount + " sequential dream scene image prompts for DALL-E. " +
+            "Imagine like an innocent child mixing these concepts into a surreal dream story. " +
+            "Each scene should flow naturally to the next like a dream sequence.\n\n" +
+            "Requirements for each image:\n" +
+            "1. Childlike, whimsical, dreamy style\n" +
+            "2. Bold outlines with flat bright colors\n" +
+            "3. Simple geometric shapes\n" +
+            "4. Plain or transparent background\n" +
+            "5. No complex textures or gradients\n" +
+            "6. Strong contrast between color regions\n\n" +
+            "Output ONLY " + dreamImageCount + " prompts separated by '---', nothing else. No numbering, no explanation.";
 
         string requestBody = "{" +
             "\"model\": \"claude-sonnet-4-20250514\"," +
-            "\"max_tokens\": 300," +
+            "\"max_tokens\": 800," +
             "\"messages\": [{\"role\": \"user\", \"content\": \"" + EscapeJson(userMessage) + "\"}]" +
             "}";
 
@@ -193,30 +203,39 @@ public class CreativeDrawingManager : MonoBehaviour
 
         if (request.result != UnityWebRequest.Result.Success)
         {
-            Debug.LogError("Claude API 오류: " + request.error + "\n" + request.downloadHandler.text);
-            callback("");
+            Debug.LogError("Claude API 오류: " + request.error);
             yield break;
         }
 
         string json = request.downloadHandler.text;
         int textStart = json.IndexOf("\"text\":\"") + 8;
         int textEnd = json.IndexOf("\"", textStart);
+
         if (textStart > 8 && textEnd > textStart)
         {
-            string prompt = json.Substring(textStart, textEnd - textStart);
-            prompt = UnescapeJson(prompt);
-            Debug.Log("Claude 생성 프롬프트: " + prompt);
-            callback(prompt);
+            string raw = json.Substring(textStart, textEnd - textStart);
+            raw = UnescapeJson(raw);
+            Debug.Log("Claude 꿈 스토리 원문:\n" + raw);
+
+            // --- 구분자로 프롬프트 분리
+            string[] parts = raw.Split(new string[] { "---" }, System.StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                string trimmed = part.Trim();
+                if (!string.IsNullOrEmpty(trimmed))
+                    dreamPrompts.Add(trimmed);
+            }
+
+            Debug.Log("생성된 꿈 프롬프트 수: " + dreamPrompts.Count);
         }
         else
         {
             Debug.LogError("Claude 응답 파싱 실패: " + json);
-            callback("");
         }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // DALL-E 3: 프롬프트로 이미지 생성
+    // GPT Image API: 프롬프트로 이미지 생성
     // ─────────────────────────────────────────────────────────────
     IEnumerator GenerateImageWithDallE(string prompt, System.Action<Texture2D> callback)
     {
@@ -239,48 +258,36 @@ public class CreativeDrawingManager : MonoBehaviour
 
         if (request.result != UnityWebRequest.Result.Success)
         {
-            Debug.LogError("DALL-E API 오류: " + request.error + "\n" + request.downloadHandler.text);
+            Debug.LogError("GPT Image API 오류: " + request.error + "\n" + request.downloadHandler.text);
             callback(null);
             yield break;
         }
 
         string json = request.downloadHandler.text;
-
         string b64Data = null;
         string imageUrlData = null;
 
         try
         {
-            // "b64_json": " 형태 (공백 포함) 처리
-            string[] searchKeys = new string[] { "\"b64_json\":\"", "\"b64_json\": \"" };
+            string[] searchKeys = { "\"b64_json\":\"", "\"b64_json\": \"" };
             int b64Start = -1;
-
             foreach (var key in searchKeys)
             {
                 int idx = json.IndexOf(key);
-                if (idx >= 0)
-                {
-                    b64Start = idx + key.Length;
-                    break;
-                }
+                if (idx >= 0) { b64Start = idx + key.Length; break; }
             }
 
             if (b64Start >= 0)
             {
                 int b64End = b64Start;
-                while (b64End < json.Length)
-                {
-                    char c = json[b64End];
-                    if (c == '"') break;
-                    b64End++;
-                }
-                b64Data = json.Substring(b64Start, b64End - b64Start);
-                b64Data = b64Data.Replace("\\n", "").Replace("\n", "").Replace(" ", "").Replace("\r", "");
+                while (b64End < json.Length && json[b64End] != '"') b64End++;
+                b64Data = json.Substring(b64Start, b64End - b64Start)
+                    .Replace("\\n", "").Replace("\n", "").Replace(" ", "").Replace("\r", "");
                 Debug.Log("Base64 데이터 길이: " + b64Data.Length);
             }
             else
             {
-                string[] urlKeys = new string[] { "\"url\":\"", "\"url\": \"" };
+                string[] urlKeys = { "\"url\":\"", "\"url\": \"" };
                 foreach (var key in urlKeys)
                 {
                     int idx = json.IndexOf(key);
@@ -288,9 +295,7 @@ public class CreativeDrawingManager : MonoBehaviour
                     {
                         int urlStart = idx + key.Length;
                         int urlEnd = json.IndexOf("\"", urlStart);
-                        imageUrlData = json.Substring(urlStart, urlEnd - urlStart);
-                        imageUrlData = UnescapeJson(imageUrlData);
-                        Debug.Log("Image URL: " + imageUrlData);
+                        imageUrlData = UnescapeJson(json.Substring(urlStart, urlEnd - urlStart));
                         break;
                     }
                 }
@@ -303,7 +308,6 @@ public class CreativeDrawingManager : MonoBehaviour
             yield break;
         }
 
-        // try 블록 밖에서 처리
         if (b64Data != null)
         {
             try
@@ -343,36 +347,23 @@ public class CreativeDrawingManager : MonoBehaviour
             callback(null);
             yield break;
         }
-
-        Texture2D texture = DownloadHandlerTexture.GetContent(request);
-        callback(texture);
+        callback(DownloadHandlerTexture.GetContent(request));
     }
 
     void UpdateUI()
     {
-        bool hasWords = words.Count >= 2;
-        startDrawingButton.interactable = hasWords && !isProcessing;
+        startDrawingButton.interactable = words.Count >= 2 && !isProcessing;
     }
 
     void SetStatus(string message)
     {
         Debug.Log("[CreativeDrawing] " + message);
-        if (statusText != null)
-            statusText.text = message;
+        if (statusText != null) statusText.text = message;
     }
 
-    string EscapeJson(string str)
-    {
-        return str.Replace("\\", "\\\\")
-                  .Replace("\"", "\\\"")
-                  .Replace("\n", "\\n")
-                  .Replace("\r", "\\r");
-    }
+    string EscapeJson(string str) =>
+        str.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r");
 
-    string UnescapeJson(string str)
-    {
-        return str.Replace("\\n", "\n")
-                  .Replace("\\\"", "\"")
-                  .Replace("\\\\", "\\");
-    }
+    string UnescapeJson(string str) =>
+        str.Replace("\\n", "\n").Replace("\\\"", "\"").Replace("\\\\", "\\");
 }

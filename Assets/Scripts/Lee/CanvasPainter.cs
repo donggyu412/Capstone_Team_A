@@ -89,7 +89,7 @@ public class CanvasPainter : MonoBehaviour
     // 공개 API
     // ─────────────────────────────────────────────────────────────
 
-    public void Paint(Vector2 uv, Material brushMaterial, float pressure)
+    public void Paint(Vector2 uv, Material brushMaterial, float pressure = 1.0f)
     {
         if (canvasRenderTexture == null || brushMaterial == null) return;
 
