@@ -10,6 +10,7 @@ public class CanvasPainter : MonoBehaviour
     public Material inkAddMaterial;
     public Material inkFlowMaterial;
     public Material inkDripMaterial;
+    public Material inkEraseMaterial; // 지우개용 (선택사항, 없어도 동작)
 
     [Header("잉크 물리 파라미터")]
     [Range(0.1f, 3.0f)] public float dripThreshold       = 0.5f;
@@ -24,8 +25,7 @@ public class CanvasPainter : MonoBehaviour
     private RenderTexture inkMapTempTexture;
 
     // ─────────────────────────────────────────────────────────────
-    // Awake: Inspector 연결이 끊겨도 이름으로 자동 탐색
-    // ML-Agents 에피소드 리셋으로 재생성돼도 머티리얼을 올바르게 연결
+    // Awake: 머티리얼 자동 탐색 (ML-Agents 리셋 대응)
     // ─────────────────────────────────────────────────────────────
     void Awake()
     {
@@ -33,29 +33,34 @@ public class CanvasPainter : MonoBehaviour
         inkFlowMaterial = EnsureMaterial(inkFlowMaterial, "InkFlowMat");
         inkDripMaterial = EnsureMaterial(inkDripMaterial, "InkDripMat");
 
-        Debug.Log($"[CanvasPainter] Awake 머티리얼 — " +
+        // InkEraseMat는 선택사항 — 없어도 경고 없이 null 유지
+        if (inkEraseMaterial == null)
+            inkEraseMaterial = FindMaterialByName("InkEraseMat");
+
+        Debug.Log($"[CanvasPainter] Awake — " +
                   $"Add:{inkAddMaterial?.name ?? "NULL"} " +
                   $"Flow:{inkFlowMaterial?.name ?? "NULL"} " +
                   $"Drip:{inkDripMaterial?.name ?? "NULL"}");
     }
 
-    /// <summary>
-    /// 이미 올바르게 연결돼 있으면 그대로 반환.
-    /// null이거나 이름이 다르면 프로젝트 전체에서 targetName으로 탐색.
-    /// </summary>
     private Material EnsureMaterial(Material mat, string targetName)
     {
         if (mat != null && mat.name == targetName) return mat;
+        Material found = FindMaterialByName(targetName);
+        if (found == null)
+            Debug.LogWarning($"[CanvasPainter] '{targetName}' 머티리얼을 찾지 못했습니다.");
+        return found;
+    }
 
+    private Material FindMaterialByName(string targetName)
+    {
         foreach (var m in Resources.FindObjectsOfTypeAll<Material>())
             if (m.name == targetName) return m;
-
-        Debug.LogWarning($"[CanvasPainter] '{targetName}' 머티리얼을 찾지 못했습니다.");
         return null;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Start: 반드시 텍스처 생성 후 ClearCanvas 호출 (순서 중요)
+    // Start: 텍스처 생성 후 ClearCanvas (순서 중요)
     // ─────────────────────────────────────────────────────────────
     void Start()
     {
@@ -68,19 +73,16 @@ public class CanvasPainter : MonoBehaviour
         int w = canvasRenderTexture.width;
         int h = canvasRenderTexture.height;
 
-        // 1. 텍스처 먼저 생성
         tempRenderTexture = CreateRT(w, h, canvasRenderTexture.format);
         inkMapTexture     = CreateRT(w, h, RenderTextureFormat.RFloat);
         inkMapTempTexture = CreateRT(w, h, RenderTextureFormat.RFloat);
 
-        // 2. 생성 후 초기화 (inkMapTexture 쓰레기값 제거 포함)
-        ClearCanvas();
+        ClearCanvas(); // 텍스처 생성 후 초기화 (inkMap 쓰레기값 제거)
     }
 
     void Update()
     {
         if (inkMapTexture == null) return;
-
         SimulateInkFlow();
         ApplyInkToCanvas();
     }
@@ -89,7 +91,8 @@ public class CanvasPainter : MonoBehaviour
     // 공개 API
     // ─────────────────────────────────────────────────────────────
 
-    public void Paint(Vector2 uv, Material brushMaterial, float pressure = 1.0f)
+    /// <summary>캔버스에 획을 그리고 inkMap에 잉크를 누적합니다.</summary>
+    public void Paint(Vector2 uv, Material brushMaterial, float pressure)
     {
         if (canvasRenderTexture == null || brushMaterial == null) return;
 
@@ -102,15 +105,7 @@ public class CanvasPainter : MonoBehaviour
         AddInkToMap(uv, pressure);
     }
 
-    public void AccumulateInkOnly(Vector2 uv, float pressure)
-    {
-        AddInkToMap(uv, pressure);
-    }
-
-    /// <summary>
-    /// 잉크 맵 누적 없이 캔버스에만 획을 그립니다.
-    /// 스프레이·블러처럼 잉크 흘러내림 효과가 필요 없는 브러시 전용.
-    /// </summary>
+    /// <summary>inkMap 누적 없이 캔버스에만 그립니다. (스프레이·블러·지우개 전용)</summary>
     public void PaintOnly(Vector2 uv, Material brushMaterial, float pressure)
     {
         if (canvasRenderTexture == null || brushMaterial == null) return;
@@ -120,9 +115,30 @@ public class CanvasPainter : MonoBehaviour
 
         Graphics.Blit(canvasRenderTexture, tempRenderTexture, brushMaterial);
         Graphics.Blit(tempRenderTexture, canvasRenderTexture);
-        // AddInkToMap 호출 없음 → 잉크 흘러내림 효과 없음
     }
 
+    /// <summary>캔버스에 획은 안 그리고 inkMap에만 잉크를 누적합니다.</summary>
+    public void AccumulateInkOnly(Vector2 uv, float pressure)
+    {
+        AddInkToMap(uv, pressure);
+    }
+
+    /// <summary>
+    /// 지우개 사용 시 inkMap의 특정 UV 위치 잉크를 제거합니다.
+    /// inkEraseMaterial이 없으면 아무 동작 안 함.
+    /// </summary>
+    public void EraseInkAtUV(Vector2 uv, float radius)
+    {
+        if (inkEraseMaterial == null || inkMapTexture == null) return;
+
+        inkEraseMaterial.SetVector("_BrushUV",    new Vector4(uv.x, uv.y, 0, 0));
+        inkEraseMaterial.SetFloat("_EraseRadius", radius);
+
+        Graphics.Blit(inkMapTexture, inkMapTempTexture, inkEraseMaterial);
+        Graphics.Blit(inkMapTempTexture, inkMapTexture);
+    }
+
+    /// <summary>캔버스와 inkMap을 아이보리색으로 초기화합니다.</summary>
     public void ClearCanvas()
     {
         RenderTexture prev = RenderTexture.active;
@@ -130,7 +146,7 @@ public class CanvasPainter : MonoBehaviour
         if (canvasRenderTexture != null)
         {
             RenderTexture.active = canvasRenderTexture;
-            GL.Clear(true, true, new Color(1f, 0.96f, 0.86f));
+            GL.Clear(true, true, Color.white); // RT는 흰색 초기화. 아이보리 색상은 CanvasMaterial Base Color(FFF5DC)가 담당.
         }
 
         if (inkMapTexture != null)
@@ -209,7 +225,11 @@ public class CanvasPainter : MonoBehaviour
 
     private RenderTexture CreateRT(int width, int height, RenderTextureFormat format)
     {
-        var rt = new RenderTexture(width, height, 0, format)
+        var desc = new RenderTextureDescriptor(width, height, format, 0)
+        {
+            sRGB = false
+        };
+        var rt = new RenderTexture(desc)
         {
             filterMode = FilterMode.Bilinear,
             wrapMode   = TextureWrapMode.Clamp

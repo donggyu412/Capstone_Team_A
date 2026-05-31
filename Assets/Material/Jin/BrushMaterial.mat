@@ -8,7 +8,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: BrushMaterial
-  m_Shader: {fileID: 4800000, guid: c3a4c2b9b987cbf4aa4b916648a11807, type: 3}
+  m_Shader: {fileID: 4800000, guid: 7a4e7797f22d1924488d7350eef1955b, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -91,6 +91,10 @@ Material:
     - _AlphaToMask: 0
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
+    - _BristleCount: 16
+    - _BristleJitter: 0.15
+    - _BristleSize: 0.003
+    - _BristleSpread: 0.85
     - _BrushHardness: 0.5
     - _BrushSize: 0.01
     - _BumpScale: 1
@@ -114,7 +118,7 @@ Material:
     - _OcclusionStrength: 1
     - _PaperHeight: 0.5
     - _Parallax: 0.005
-    - _Pressure: 0.21548957
+    - _Pressure: 1
     - _PressureCurve: 1.5
     - _QueueOffset: 0
     - _ReceiveShadows: 1
@@ -132,7 +136,7 @@ Material:
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _BrushColor: {r: 0, g: 0.16189837, b: 1, a: 1}
-    - _BrushUV: {r: 0.20043798, g: 0.3591954, b: 0, a: 0}
+    - _BrushUV: {r: 0.11753492, g: 0.69040245, b: 0, a: 0}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _InkColor: {r: 0.079999976, g: 0.11999995, b: 0.75, a: 1}
