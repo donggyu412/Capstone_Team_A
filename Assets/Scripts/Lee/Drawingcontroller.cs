@@ -42,6 +42,22 @@ public class DrawingController : MonoBehaviour
     [Range(0f, 1f)] public float eegExcited = 0f;
     [Range(0f, 1f)] public float eegCalm = 0f;
 
+    // ─────────────────────────────────────────────────────────────
+    // 어린아이 스타일 지우기/다시그리기 설정
+    // ─────────────────────────────────────────────────────────────
+    [Header("어린아이 스타일 (지우기/다시그리기)")]
+    [Tooltip("획 하나를 그린 뒤 지우고 다시 그릴 확률 (0=안함, 1=항상)")]
+    [Range(0f, 1f)] public float mistakeChance = 0.2f;
+
+    [Tooltip("지우개 반경 (inkEraseMaterial 기준, UV 단위)")]
+    [Range(0.005f, 0.1f)] public float eraseRadius = 0.03f;
+
+    [Tooltip("지운 뒤 '고민하는' 멈춤 시간(초)")]
+    [Range(0f, 2f)] public float hesitationTime = 0.4f;
+
+    [Tooltip("지우개로 지울 때 각 UV 포인트 사이 간격 (클수록 듬성듬성 지움)")]
+    [Range(1, 10)] public int eraseStepInterval = 2;
+
     private Transform[] joints;
     private Vector3[] jointAxes;
     private Rigidbody[] allRigidbodies;
@@ -98,14 +114,12 @@ public class DrawingController : MonoBehaviour
         }
     }
 
-    // 단일 이미지 테스트용
     public void StartDrawingExternal()
     {
         if (isPainting || targetImage == null) return;
         StartCoroutine(StartDrawing(new List<Texture2D> { targetImage }));
     }
 
-    // CreativeDrawingManager에서 꿈 이미지들 전달
     public void StartDreamDrawing(List<Texture2D> dreamImages)
     {
         if (isPainting || dreamImages == null || dreamImages.Count == 0) return;
@@ -120,10 +134,9 @@ public class DrawingController : MonoBehaviour
         eegCalm = Mathf.Clamp01(calm);
     }
 
-    // -------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
     // 메인 드로잉 코루틴
-    // 이미지가 여러 장이면 꿈 전환 효과 적용
-    // -------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
     IEnumerator StartDrawing(List<Texture2D> images)
     {
         isPainting = true;
@@ -147,11 +160,9 @@ public class DrawingController : MonoBehaviour
 
             Debug.Log("=== 꿈 이미지 " + (imgIdx + 1) + "/" + images.Count + " 그리기 ===");
 
-            // 현재 이미지 획 그룹 생성
             List<StrokeGroup> currentGroups = BuildStrokeGroups(currentImage);
             List<List<Vector2>> allCurrentPaths = GetAllPathsSorted();
 
-            // 다음 이미지 획 그룹 생성 (전환용)
             List<List<Vector2>> allNextPaths = null;
             if (nextImage != null)
             {
@@ -159,10 +170,8 @@ public class DrawingController : MonoBehaviour
                 allNextPaths = GetAllPathsSorted();
             }
 
-            // 현재 이미지 그리기 (랜덤 그렸다 지우기 포함)
             yield return StartCoroutine(DrawWithChildlikeStyle(currentGroups, allCurrentPaths));
 
-            // 다음 이미지가 있으면 전환 효과
             if (nextImage != null && allNextPaths != null)
             {
                 Debug.Log("=== 꿈 이미지 전환 ===");
@@ -182,7 +191,6 @@ public class DrawingController : MonoBehaviour
         isPainting = false;
     }
 
-    // 임시 저장용
     private List<StrokeGroup> lastBuiltGroups = new List<StrokeGroup>();
 
     List<StrokeGroup> BuildStrokeGroups(Texture2D image)
@@ -193,8 +201,6 @@ public class DrawingController : MonoBehaviour
         Color[] pixels = image.GetPixels();
         Color bgColor = DetectBackgroundColor(pixels, imgW, imgH);
 
-        // -- 1단계: Sobel 엣지 감지 ------------------------------
-        // 각 픽셀의 밝기 변화(gradient)를 계산해서 엣지(윤곽선) 픽셀 감지
         float[,] edgeMap = new float[imgW, imgH];
         float maxEdge = 0f;
 
@@ -205,7 +211,6 @@ public class DrawingController : MonoBehaviour
                 Color c = pixels[y * imgW + x];
                 if (IsBackground(c, bgColor)) continue;
 
-                // 주변 픽셀 밝기
                 float tl = GetBrightness(pixels[(y - 1) * imgW + (x - 1)]);
                 float tm = GetBrightness(pixels[(y - 1) * imgW + x]);
                 float tr = GetBrightness(pixels[(y - 1) * imgW + (x + 1)]);
@@ -215,7 +220,6 @@ public class DrawingController : MonoBehaviour
                 float bm = GetBrightness(pixels[(y + 1) * imgW + x]);
                 float br2 = GetBrightness(pixels[(y + 1) * imgW + (x + 1)]);
 
-                // Sobel 필터
                 float gx = -tl - 2 * ml - bl2 + tr + 2 * mr + br2;
                 float gy = -tl - 2 * tm - tr + bl2 + 2 * bm + br2;
                 float g = Mathf.Sqrt(gx * gx + gy * gy);
@@ -225,11 +229,7 @@ public class DrawingController : MonoBehaviour
             }
         }
 
-        // -- 2단계: 엣지 픽셀을 연결된 획으로 묶기 ---------------
-        float edgeThreshold = maxEdge * 0.3f; // 상위 70% 엣지만 사용
-        bool[,] visited = new bool[imgW, imgH];
-
-        // 엣지 픽셀 수집
+        float edgeThreshold = maxEdge * 0.3f;
         List<Vector2Int> edgePixels = new List<Vector2Int>();
         for (int y = 1; y < imgH - 1; y += samplingStep)
             for (int x = 1; x < imgW - 1; x += samplingStep)
@@ -238,7 +238,6 @@ public class DrawingController : MonoBehaviour
 
         Debug.Log("엣지 픽셀 수: " + edgePixels.Count);
 
-        // 엣지 픽셀을 연결된 경로로 묶기 (가까운 픽셀끼리 연결)
         bool[] used = new bool[edgePixels.Count];
         int searchRadius = samplingStep * 3;
 
@@ -253,7 +252,6 @@ public class DrawingController : MonoBehaviour
             path.Add(new Vector2((float)edgePixels[current].x / imgW,
                                  (float)edgePixels[current].y / imgH));
 
-            // 가장 가까운 미사용 엣지 픽셀로 연결
             for (int step = 0; step < 500; step++)
             {
                 int nearest = -1;
@@ -280,7 +278,6 @@ public class DrawingController : MonoBehaviour
                 AddPathToGroup(lastBuiltGroups, pathColor, path);
         }
 
-        // -- 3단계: 내부 색상 채우기 (색상 영역별 가로 획) --------
         for (int y = 0; y < imgH; y += samplingStep * 2)
         {
             List<Vector2> fillPath = null;
@@ -289,7 +286,8 @@ public class DrawingController : MonoBehaviour
             for (int x = 0; x < imgW; x += samplingStep)
             {
                 Color c = pixels[y * imgW + x];
-                if (IsBackground(c, bgColor) || edgeMap[Mathf.Clamp(x, 1, imgW - 2), Mathf.Clamp(y, 1, imgH - 2)] > edgeThreshold)
+                if (IsBackground(c, bgColor) ||
+                    edgeMap[Mathf.Clamp(x, 1, imgW - 2), Mathf.Clamp(y, 1, imgH - 2)] > edgeThreshold)
                 {
                     if (fillPath != null && fillPath.Count > 1)
                         AddPathToGroup(lastBuiltGroups, fillColor, fillPath);
@@ -312,7 +310,6 @@ public class DrawingController : MonoBehaviour
 
         Debug.Log("색상 그룹: " + lastBuiltGroups.Count + "개");
 
-        // 어두운 색(검은 윤곽선) 먼저, 밝은 색 나중에 정렬
         lastBuiltGroups.Sort((a, b) => {
             float ha, sa, va, hb, sb, vb;
             Color.RGBToHSV(a.color, out ha, out sa, out va);
@@ -325,14 +322,12 @@ public class DrawingController : MonoBehaviour
 
     float GetBrightness(Color c) => (c.r + c.g + c.b) / 3f;
 
-    // 현재 붓 위치에서 가까운 획 순서로 정렬
     List<List<Vector2>> GetAllPathsSorted()
     {
         List<List<Vector2>> allPaths = new List<List<Vector2>>();
         foreach (var g in lastBuiltGroups)
             allPaths.AddRange(g.paths);
 
-        // Greedy: 현재 위치에서 가장 가까운 획부터
         List<List<Vector2>> sorted = new List<List<Vector2>>();
         List<bool> used = new List<bool>(new bool[allPaths.Count]);
         Vector2 currentPos = new Vector2(0.5f, 0.5f);
@@ -355,9 +350,10 @@ public class DrawingController : MonoBehaviour
         return sorted;
     }
 
-    // -------------------------------------------------------------
-    // 어린아이처럼 그리기 (랜덤 그렸다 지우기)
-    // -------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
+    // 어린아이처럼 그리기
+    // mistakeChance 확률로 획을 지우고 잠깐 멈춘 뒤 다시 그림
+    // ─────────────────────────────────────────────────────────────
     IEnumerator DrawWithChildlikeStyle(List<StrokeGroup> groups, List<List<Vector2>> sortedPaths)
     {
         Dictionary<List<Vector2>, Color> pathColorMap = new Dictionary<List<Vector2>, Color>();
@@ -371,20 +367,89 @@ public class DrawingController : MonoBehaviour
 
             Color pathColor = pathColorMap.ContainsKey(path) ? pathColorMap[path] : Color.black;
             Color eegColor = ApplyEEGToColor(pathColor);
+
             if (brushMaterial != null)
                 brushMaterial.SetColor("_BrushColor", eegColor);
             if (canvasPainter != null)
                 canvasPainter.inkColor = eegColor;
 
             float currentStrokeSpeed = GetEEGStrokeSpeed();
+
+            // ── 획 그리기 ──────────────────────────────────────────
             yield return StartCoroutine(DrawPath(path, currentStrokeSpeed, eegColor));
+
+            // ── 실수 판정: mistakeChance 확률로 지우고 다시 그리기 ──
+            if (Random.value < mistakeChance)
+            {
+                Debug.Log("[Childlike] 실수! 지우고 다시 그리는 중...");
+
+                // 1) 그린 획을 지우개로 지우기
+                yield return StartCoroutine(EraseStroke(path));
+
+                // 2) 고민하는 멈춤
+                if (hesitationTime > 0f)
+                    yield return new WaitForSeconds(hesitationTime);
+
+                // 3) 같은 획 다시 그리기
+                Debug.Log("[Childlike] 다시 그리기...");
+                yield return StartCoroutine(DrawPath(path, currentStrokeSpeed, eegColor));
+            }
         }
     }
 
-    // -------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
+    // 지우개 코루틴
+    // 획 경로를 따라 로봇팔을 이동시키면서 EraseInkAtUV 호출
+    // ─────────────────────────────────────────────────────────────
+    IEnumerator EraseStroke(List<Vector2> path)
+    {
+        if (canvasPainter == null) yield break;
+        if (robotBrush != null) robotBrush.enabled = false;
+
+        // 지우개 시작점으로 이동 (붓 들기)
+        yield return StartCoroutine(MoveSmoothly(
+            UVToWorld(path[0]) - canvas.up * 0.2f, liftSpeed));
+
+        // 지우개 내리기
+        yield return StartCoroutine(MoveSmoothly(UVToWorld(path[0]), liftSpeed));
+
+        // 획 경로를 따라 이동하면서 지우기
+        for (int i = 0; i < path.Count; i += eraseStepInterval)
+        {
+            Vector2 uv = path[i];
+
+            // CanvasPainter의 EraseInkAtUV로 해당 위치 잉크 제거
+            canvasPainter.EraseInkAtUV(uv, eraseRadius);
+
+            // 로봇팔 이동
+            currentTarget = UVToWorld(uv);
+            isMoving = true;
+
+            float elapsed = 0f;
+            while (elapsed < maxWaitTime)
+            {
+                if (Vector3.Distance(brushTip.position, currentTarget) < arrivalThreshold) break;
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        // 마지막 포인트도 지우기
+        if (path.Count > 0)
+            canvasPainter.EraseInkAtUV(path[path.Count - 1], eraseRadius);
+
+        isMoving = false;
+
+        // 붓 들기 (지우개 동작 끝)
+        yield return StartCoroutine(MoveSmoothly(
+            UVToWorld(path[0]) - canvas.up * 0.2f, liftSpeed));
+
+        Debug.Log("[Childlike] 지우기 완료");
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // 이미지 전환 효과
-    // 지우기 없이 다음 이미지를 바로 덧그리기
-    // -------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
     IEnumerator TransitionToNextImage(
         List<StrokeGroup> curGroups, List<List<Vector2>> curPaths,
         List<StrokeGroup> nextGroups, List<List<Vector2>> nextPaths)
@@ -394,7 +459,6 @@ public class DrawingController : MonoBehaviour
             foreach (var path in g.paths)
                 nextColorMap[path] = g.color;
 
-        // 지우기 없이 바로 덧그리기
         foreach (var path in nextPaths)
         {
             Color nextColor = nextColorMap.ContainsKey(path) ? nextColorMap[path] : Color.black;
@@ -407,9 +471,9 @@ public class DrawingController : MonoBehaviour
         }
     }
 
-    // -------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
     // 획 그리기
-    // -------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
     IEnumerator DrawPath(List<Vector2> path, float speed, Color color)
     {
         if (path.Count == 0) yield break;
@@ -419,15 +483,12 @@ public class DrawingController : MonoBehaviour
         if (canvasPainter != null)
             canvasPainter.inkColor = color;
 
-        // 붓 들기 — RobotBrush 비활성화 (이동 중 찍히지 않게)
         if (robotBrush != null) robotBrush.enabled = false;
         yield return StartCoroutine(MoveSmoothly(
             UVToWorld(path[0]) - canvas.up * 0.2f, liftSpeed));
 
-        // 붓 내리기 — 아직 비활성화 유지
         yield return StartCoroutine(MoveSmoothly(UVToWorld(path[0]), speed));
 
-        // 획 그리기 — RobotBrush 활성화 (캔버스에 닿으면 자동으로 그림)
         if (robotBrush != null) robotBrush.enabled = true;
         for (int i = 1; i < path.Count; i++)
         {
@@ -451,14 +512,15 @@ public class DrawingController : MonoBehaviour
             }
         }
 
-        // 획 끝나면 다시 비활성화
         if (robotBrush != null) robotBrush.enabled = false;
         isMoving = false;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // 배경/색상 유틸리티
+    // ─────────────────────────────────────────────────────────────
     Color DetectBackgroundColor(Color[] pixels, int imgW, int imgH)
     {
-        // 1. 투명 배경 체크
         if (pixels[0].a < 0.1f || pixels[imgW - 1].a < 0.1f)
         {
             Debug.Log("투명 배경 감지");
@@ -470,15 +532,12 @@ public class DrawingController : MonoBehaviour
         Color bl = pixels[(imgH - 1) * imgW];
         Color br = pixels[(imgH - 1) * imgW + imgW - 1];
 
-        // 2. 모서리 4개가 비슷한 색인지 확인
-        float diffH = ColorDistance(tl, tr);
-        float diffV = ColorDistance(tl, bl);
-        float diffD = ColorDistance(tl, br);
-        float maxDiff = Mathf.Max(diffH, Mathf.Max(diffV, diffD));
+        float maxDiff = Mathf.Max(
+            ColorDistance(tl, tr),
+            Mathf.Max(ColorDistance(tl, bl), ColorDistance(tl, br)));
 
         if (maxDiff < 0.25f)
         {
-            // 모서리가 비슷한 색 -> 그게 배경
             Color avg = new Color(
                 (tl.r + tr.r + bl.r + br.r) / 4f,
                 (tl.g + tr.g + bl.g + br.g) / 4f,
@@ -487,7 +546,6 @@ public class DrawingController : MonoBehaviour
             return avg;
         }
 
-        // 3. 모서리가 다 다른 색 -> 배경 없음 (전체 그리기)
         Debug.Log("배경 없음 -> 전체 그리기");
         return Color.clear;
     }
@@ -503,17 +561,11 @@ public class DrawingController : MonoBehaviour
     bool IsBackground(Color pixel, Color bgColor)
     {
         if (pixel.a < 0.1f) return true;
-
-        // 배경 없음 or 투명 배경 -> 밝기로 판단
         if (bgColor.a < 0.1f)
             return (pixel.r + pixel.g + pixel.b) / 3f > backgroundThreshold;
-
         float diff = ColorDistance(pixel, bgColor);
-
-        // 배경이 어두우면 더 엄격하게 (검은 윤곽선 오인 방지)
         float bgBrightness = (bgColor.r + bgColor.g + bgColor.b) / 3f;
         float threshold = bgBrightness < 0.2f ? 0.25f : 0.15f;
-
         return diff < threshold;
     }
 
@@ -534,7 +586,8 @@ public class DrawingController : MonoBehaviour
         s -= eegCalm * 0.2f;
         v += eegJoy * 0.2f;
         h = Mathf.Lerp(h, 0.6f, eegSadness * 0.4f);
-        s = Mathf.Clamp01(s); v = Mathf.Clamp01(v);
+        s = Mathf.Clamp01(s);
+        v = Mathf.Clamp01(v);
         Color result = Color.HSVToRGB(h, s, v);
         result.a = originalColor.a;
         return result;
@@ -550,6 +603,9 @@ public class DrawingController : MonoBehaviour
         return Mathf.Clamp(speed, 0.01f, 0.5f);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // IK / 관절 유틸리티
+    // ─────────────────────────────────────────────────────────────
     void BuildJointChain()
     {
         if (j1 != null) j1.SetParent(j0, true);
